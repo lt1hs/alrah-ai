@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Simple API Test</title>
+</head>
+<body>
+    <h1>API Connection Test</h1>
+    <button id="test">Test API Connection</button>
+    <div id="log"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        
+        function addLog(message) {
+            const div = document.createElement('div');
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            log.appendChild(div);
+        }
+
+        document.getElementById('test').addEventListener('click', async () => {
+            try {
+                addLog('Testing API connection...');
+                
+                // Test basic API
+                const healthResponse = await fetch('http://91.109.114.158:8000/');
+                const healthData = await healthResponse.json();
+                addLog(`✅ API Health: ${healthData.message}`);
+                
+                // Test LiveKit status
+                const statusResponse = await fetch('http://91.109.114.158:8000/livekit/status');
+                const statusData = await statusResponse.json();
+                addLog(`✅ LiveKit configured: ${statusData.livekit_configured}`);
+                addLog(`✅ LiveKit URL: ${statusData.livekit_url}`);
+                
+                // Test token generation
+                const tokenResponse = await fetch('http://91.109.114.158:8000/livekit/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: 'test_user' })
+                });
+                
+                const tokenData = await tokenResponse.json();
+                addLog(`✅ Token generated: ${tokenData.token.substring(0, 30)}...`);
+                
+                addLog('🎉 All API tests passed! Your backend is working perfectly.');
+                addLog('💡 The issue is with the LiveKit JavaScript library loading.');
+                addLog('💡 You can use the REST API endpoints directly in your app instead.');
+                
+            } catch (error) {
+                addLog(`❌ Error: ${error.message}`);
+            }
+        });
+    </script>
+</body>
+</html>

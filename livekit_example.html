@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Alrah AI Voice Assistant</title>
+    <script src="https://unpkg.com/livekit-client@2.5.7/dist/livekit-client.umd.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .status { margin: 20px 0; padding: 10px; background: #f0f0f0; }
+        .connected { background: #d4edda; }
+        .disconnected { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>مساعد الذكي لمكتبة الرحيق المختوم</h1>
+    
+    <div id="status" class="status disconnected">
+        Status: Disconnected
+    </div>
+    
+    <button id="connect">Connect to Voice Assistant</button>
+    <button id="disconnect" disabled>Disconnect</button>
+    
+    <div id="messages" style="margin-top: 20px;"></div>
+
+    <script>
+        const API_BASE = 'http://91.109.114.158:8000';
+        const connectBtn = document.getElementById('connect');
+        const disconnectBtn = document.getElementById('disconnect');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        let room;
+        let connected = false;
+
+        function updateStatus(message, isConnected) {
+            statusDiv.textContent = `Status: ${message}`;
+            statusDiv.className = `status ${isConnected ? 'connected' : 'disconnected'}`;
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+            connected = isConnected;
+        }
+
+        function addMessage(message) {
+            const div = document.createElement('div');
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            div.style.margin = '5px 0';
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Wait for LiveKit to load
+        function waitForLiveKit() {
+            return new Promise((resolve) => {
+                if (typeof LiveKit !== 'undefined') {
+                    resolve();
+                } else {
+                    setTimeout(() => waitForLiveKit().then(resolve), 100);
+                }
+            });
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                updateStatus('Loading LiveKit...', false);
+                await waitForLiveKit();
+                
+                updateStatus('Getting connection token...', false);
+                
+                // Get LiveKit token from your API
+                const tokenResponse = await fetch(`${API_BASE}/livekit/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: 'user_' + Date.now(),
+                        user_name: 'User',
+                        room_name: 'alrah-ai-room'
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    const errorText = await tokenResponse.text();
+                    throw new Error(`Failed to get token: ${errorText}`);
+                }
+                
+                const tokenData = await tokenResponse.json();
+                addMessage(`Token received for room: ${tokenData.room_name}`);
+                
+                updateStatus('Connecting to voice assistant...', false);
+                
+                // Connect to LiveKit room
+                room = new LiveKit.Room();
+                
+                // Set up event listeners
+                room.on(LiveKit.RoomEvent.Connected, () => {
+                    updateStatus('Connected - You can now speak!', true);
+                    addMessage('Connected to Alrah AI Voice Assistant');
+                });
+                
+                room.on(LiveKit.RoomEvent.Disconnected, () => {
+                    updateStatus('Disconnected', false);
+                    addMessage('Disconnected from voice assistant');
+                });
+                
+                room.on(LiveKit.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === LiveKit.Track.Kind.Audio) {
+                        const audioElement = track.attach();
+                        document.body.appendChild(audioElement);
+                        addMessage('AI is speaking...');
+                    }
+                });
+                
+                // Connect to the room
+                await room.connect(tokenData.livekit_url, tokenData.token);
+                
+                // Enable microphone
+                await room.localParticipant.enableCameraAndMicrophone(false, true);
+                addMessage('Microphone enabled');
+                
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateStatus(`Connection failed: ${error.message}`, false);
+                addMessage(`Error: ${error.message}`);
+            }
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            if (room && connected) {
+                room.disconnect();
+                room = null;
+            }
+        });
+
+        // Check API status on load
+        window.addEventListener('load', () => {
+            addMessage('Page loaded, checking API status...');
+            
+            fetch(`${API_BASE}/livekit/status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.livekit_configured) {
+                        addMessage('Warning: LiveKit not configured on server');
+                    } else {
+                        addMessage('API status: OK');
+                    }
+                })
+                .catch(error => {
+                    addMessage('Warning: Could not check server status');
+                });
+        });
+    </script>
+</body>
+</html>

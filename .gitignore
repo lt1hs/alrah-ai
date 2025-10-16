@@ -9,21 +9,37 @@ __pycache__/
 .Python
 venv/
 env/
-.venv/
+ENV/
+
+# Logs
+*.log
+server.log
+
+# SSL certificates (keep example)
+cert.pem
+key.pem
 
 # Temporary files
 *.tmp
 *.temp
-*.ogg
-*.mp3
 
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-
-# OS
+# OS files
 .DS_Store
 Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Chat history
+chat_history/
+
+# Backup files
+*~
+*.bak
+*.backup
+
+# Node modules (if any)
+node_modules/

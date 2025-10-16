@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Alrah AI Voice Assistant</title>
+    <script src="./livekit-client.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        button { padding: 15px 25px; margin: 10px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; }
+        .connect { background: #28a745; color: white; }
+        .disconnect { background: #dc3545; color: white; }
+        .status { margin: 20px 0; padding: 15px; border-radius: 5px; font-weight: bold; }
+        .connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .disconnected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .connecting { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        #messages { margin-top: 20px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .message { margin: 5px 0; padding: 5px; border-radius: 3px; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+        .info { background: #d1ecf1; }
+    </style>
+</head>
+<body>
+    <h1>🎙️ مساعد الذكي لمكتبة الرحيق المختوم</h1>
+    
+    <div id="status" class="status disconnected">
+        Status: Ready to connect
+    </div>
+    
+    <button id="connect" class="connect">🔗 Connect to Voice Assistant</button>
+    <button id="disconnect" class="disconnect" disabled>❌ Disconnect</button>
+    
+    <div id="messages"></div>
+
+    <script>
+        const API_BASE = 'http://91.109.114.158:8000';
+        const connectBtn = document.getElementById('connect');
+        const disconnectBtn = document.getElementById('disconnect');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        let room;
+        let connected = false;
+
+        function updateStatus(message, state) {
+            statusDiv.textContent = `Status: ${message}`;
+            statusDiv.className = `status ${state}`;
+            connectBtn.disabled = (state === 'connected' || state === 'connecting');
+            disconnectBtn.disabled = (state !== 'connected');
+        }
+
+        function addMessage(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Check if LiveKit loaded
+        function checkLiveKit() {
+            if (typeof LivekitClient !== 'undefined' && LivekitClient.Room) {
+                addMessage('✅ LiveKit library loaded successfully', 'success');
+                return true;
+            } else {
+                addMessage('❌ LiveKit library not available', 'error');
+                return false;
+            }
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                if (!checkLiveKit()) {
+                    throw new Error('LiveKit library not loaded');
+                }
+
+                updateStatus('Getting connection token...', 'connecting');
+                addMessage('🔑 Requesting connection token...');
+                
+                const tokenResponse = await fetch(`${API_BASE}/livekit/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: 'user_' + Date.now(),
+                        user_name: 'User',
+                        room_name: 'alrah-ai-room'
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    const errorText = await tokenResponse.text();
+                    throw new Error(`Token request failed: ${errorText}`);
+                }
+                
+                const tokenData = await tokenResponse.json();
+                addMessage(`✅ Token received for room: ${tokenData.room_name}`, 'success');
+                
+                updateStatus('Connecting to voice assistant...', 'connecting');
+                addMessage('🌐 Connecting to LiveKit server...');
+                
+                // Create room using LivekitClient
+                room = new LivekitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+                
+                // Set up event listeners
+                room.on(LivekitClient.RoomEvent.Connected, () => {
+                    updateStatus('Connected - You can now speak!', 'connected');
+                    addMessage('🎉 Connected to Alrah AI Voice Assistant!', 'success');
+                    connected = true;
+                });
+                
+                room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+                    updateStatus('Disconnected', 'disconnected');
+                    addMessage(`📴 Disconnected: ${reason}`, 'info');
+                    connected = false;
+                });
+
+                room.on(LivekitClient.RoomEvent.ConnectionStateChanged, (state) => {
+                    addMessage(`🔄 Connection state: ${state}`, 'info');
+                });
+                
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    addMessage(`🎵 Audio track received from ${participant.identity}`, 'info');
+                    if (track.kind === LivekitClient.Track.Kind.Audio) {
+                        const audioElement = track.attach();
+                        audioElement.autoplay = true;
+                        document.body.appendChild(audioElement);
+                        addMessage('🔊 AI is speaking...', 'success');
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+                    addMessage(`👤 Participant joined: ${participant.identity}`, 'info');
+                });
+                
+                // Connect to the room
+                await room.connect(tokenData.livekit_url, tokenData.token);
+                
+                // Enable microphone with better error handling
+                addMessage('🎤 Enabling microphone...');
+                try {
+                    // Check if mediaDevices is available
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        throw new Error('Microphone access not supported. Please use HTTPS or a modern browser.');
+                    }
+                    
+                    await room.localParticipant.enableCameraAndMicrophone(false, true);
+                    addMessage('✅ Microphone enabled - Start speaking!', 'success');
+                } catch (micError) {
+                    addMessage('⚠️ Microphone access failed, but you can still receive audio responses', 'error');
+                    addMessage('💡 To enable microphone: Use HTTPS or allow microphone permissions', 'info');
+                    console.warn('Microphone error:', micError);
+                }
+                
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateStatus(`Connection failed: ${error.message}`, 'disconnected');
+                addMessage(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            if (room && connected) {
+                addMessage('📴 Disconnecting...', 'info');
+                room.disconnect();
+                room = null;
+                connected = false;
+            }
+        });
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            addMessage('🚀 Page loaded, checking system status...');
+            
+            // Check browser capabilities
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                addMessage('⚠️ Microphone access not supported on this connection', 'error');
+                addMessage('💡 For full functionality, access via HTTPS or localhost', 'info');
+            } else {
+                addMessage('✅ Browser supports microphone access', 'success');
+            }
+            
+            // Check LiveKit library
+            setTimeout(() => {
+                checkLiveKit();
+            }, 500);
+            
+            // Check API status
+            fetch(`${API_BASE}/livekit/status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.livekit_configured) {
+                        addMessage('✅ API and LiveKit backend configured', 'success');
+                        addMessage('💡 Ready to connect! Click the connect button.', 'info');
+                    } else {
+                        addMessage('⚠️ LiveKit not configured on server', 'error');
+                    }
+                })
+                .catch(error => {
+                    addMessage('⚠️ Could not check server status', 'error');
+                });
+        });
+    </script>
+</body>
+</html>

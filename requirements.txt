@@ -2,3 +2,11 @@ python-telegram-bot==20.3
 openai==1.51.2
 pinecone-client==5.0.1
 python-dotenv==1.0.0
+fastapi
+uvicorn
+python-multipart
+livekit
+livekit-agents
+livekit-plugins-openai
+livekit-plugins-silero
+PyJWT
